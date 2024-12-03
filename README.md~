@@ -1,0 +1,7 @@
+# Product microservice
+
+## Dev
+
+1- Clone repository
+2- Install dependencies
+3- Create `.env` file with environment variables with `env.template` file
