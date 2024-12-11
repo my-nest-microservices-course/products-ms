@@ -4,5 +4,9 @@ CREATE TABLE "Product" (
     "name" TEXT NOT NULL,
     "price" REAL NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "updatedAt" DATETIME NOT NULL,
+    "available" BOOLEAN NOT NULL DEFAULT true
 );
+
+-- CreateIndex
+CREATE INDEX "Product_available_idx" ON "Product"("available");

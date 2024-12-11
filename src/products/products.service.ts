@@ -1,13 +1,9 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
+import { PrismaClient, Product } from '@prisma/client';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { PrismaClient } from '@prisma/client';
-import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
@@ -19,10 +15,18 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   }
 
   async create(createProductDto: CreateProductDto) {
-    await this.product.create({
-      data: createProductDto,
-    });
-    return 'This action adds a new product';
+    try {
+      await this.product.create({
+        data: createProductDto,
+      });
+      return 'This action adds a new product';
+    } catch (error) {
+      this.logger.error(`CREATE_ERROR: ${error.message}`);
+      throw new RpcException({
+        message: 'PRODUCT_CREATE_ERROR',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
   }
 
   async findAll(paginationDto: PaginationDto) {
@@ -43,23 +47,34 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     const meta = {
       total: totalPages,
       page: page,
+      lastPage: lastPage,
     };
     const result = {
       data,
-      meta,
-      lastPage: lastPage,
+      metadata: meta,
     };
     return { result };
   }
 
   async findOne(id: number) {
-    const product = await this.product.findFirst({
-      where: { id, available: true },
-    });
-    if (!product) {
-      throw new NotFoundException(`Product not found with id : ${id}`);
+    try {
+      const product = await this.product.findFirst({
+        where: { id, available: true },
+      });
+      if (!product) {
+        throw new RpcException({
+          message: `PRODUCT_NOT_FOUND_ID: ${id}`,
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+      return product;
+    } catch (error) {
+      this.logger.error(`FIND_ONE_ERROR_ID: ${id}`);
+      throw new RpcException({
+        message: `PRODUCT_NOT_FOUND_ID : ${id}`,
+        status: HttpStatus.NOT_FOUND,
+      });
     }
-    return product;
   }
 
   async update(updateProductDto: UpdateProductDto) {
@@ -73,7 +88,11 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         },
       });
     } catch (error) {
-      throw new NotFoundException(`Product not found with id : ${id}`);
+      this.logger.error(`UPDATE_ERROR_ID: ${id}`);
+      throw new RpcException({
+        message: `PRODUCT_NOT_FOUND_ID : ${id}`,
+        status: HttpStatus.NOT_FOUND,
+      });
     }
   }
 
@@ -86,7 +105,11 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         },
       });
     } catch (error) {
-      throw new NotFoundException(`Product not found with id : ${id}`);
+      this.logger.error(`REMOVE_ERROR_ID: ${id}`);
+      throw new RpcException({
+        message: `PRODUCT_NOT_FOUND_ID : ${id}`,
+        status: HttpStatus.NOT_FOUND,
+      });
     }
   }
 
@@ -98,7 +121,39 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         where: { id },
       });
     } catch (error) {
-      throw new NotFoundException(`Product not found with id : ${id}`);
+      this.logger.error(`HARD_REMOVE_ERROR_ID: ${id}`);
+      throw new RpcException({
+        message: `PRODUCT_NOT_FOUND_ID : ${id}`,
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+  }
+  async validateProducts(ids: number[]): Promise<Product[]> {
+    try {
+      const products = await this.product.findMany({
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+      });
+      if (products.length !== ids.length) {
+        this.logger.error(`SOME_PRODUCTS_NOT_FOUND`);
+        throw new RpcException({
+          message: 'SOME_PRODUCTS_NOT_FOUND',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+      return products;
+    } catch (error) {
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      this.logger.error(`ERROR_VALIDATING_PRODUCTS: ${error.message}`);
+      throw new RpcException({
+        message: 'ERROR_VALIDATING_PRODUCTS',
+        status: HttpStatus.BAD_REQUEST,
+      });
     }
   }
 }
